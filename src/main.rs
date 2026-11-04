@@ -32,7 +32,30 @@ fn main() {
     }
     let frames = load_frames(src);
     println!("the gif has {} frames", frames.len());
-    for frame in frames {
+    for frame in &frames {
         println!("{}x{}, {} ms", frame.img.width(), frame.img.height(), frame.ms);
+    }
+    
+    fn bbox(img: &RgbaImage) -> Option<(i64, i64, i64, i64)> {
+        let mut found = false;
+        let (mut x0, mut y0) = (i64::MAX, i64::MAX);
+        let (mut x1, mut y1) = (i64::MIN, i64::MIN);
+
+        for (x, y , pixel) in img.enumerate_pixels() {
+            // see if alpha in rgba is transparent (0) or is opaque (1)
+            if pixel[3] > 0 {
+                found = true;
+                let (x, y) = (x as i64, y as i64);
+                // compare between 2 value which is smaller
+                x0 = x0.min(x);
+                y0 = y0.min(y);
+                x1 = x1.max(x) + 1;
+                y1 = y1.max(y) + 1;
+            }
+        }
+        if found {Some((x0, y0, x1, y1))} else {None}
+    }
+    for (i, f) in frames.iter().enumerate() {
+        println!("frame {i}: {:?}", bbox(&f.img));
     }
 }
