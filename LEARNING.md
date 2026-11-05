@@ -1,15 +1,3 @@
-# pixel-up
-
-A small command-line tool, written in Rust, that crops pixel-art GIFs around the
-drawing and enlarges them with crisp, unblurred pixels.
-
-I built it for my pomodoro app's animal animations: Clip Studio Paint blurs
-pixel art when it scales an export, so I export at 100% and let pixel-up do
-the enlarging with nearest-neighbor scaling.
-
-> 🚧 Work in progress. PNG output works; animated GIF output is next.
-
-
 ## How the program works (so far)
 
 ### 1. Reading the command-line arguments
