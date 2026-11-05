@@ -1,6 +1,6 @@
 use std::{fs::File, io::BufReader};
 
-use image::{AnimationDecoder, RgbaImage, codecs::gif::GifDecoder};
+use image::{AnimationDecoder, ImageBuffer, RgbaImage, codecs::gif::GifDecoder, imageops};
 
 const MARGIN: i64 = 2;
 struct Frame {
@@ -25,12 +25,9 @@ fn bbox(img: &RgbaImage) -> Option<(i64, i64, i64, i64)> {
     let (mut x1, mut y1) = (i64::MIN, i64::MIN);
 
     for (x, y , pixel) in img.enumerate_pixels() {
-        // see if alpha in rgba is transparent (0) or is opaque (1)
         if pixel[3] > 0 {
             found = true;
-            // shadowing?
             let (x, y) = (x as i64, y as i64);
-            // compare between 2 value which is smaller
             x0 = x0.min(x);
             y0 = y0.min(y);
             x1 = x1.max(x + 1);
@@ -39,65 +36,76 @@ fn bbox(img: &RgbaImage) -> Option<(i64, i64, i64, i64)> {
     }
     if found {Some((x0, y0, x1, y1))} else {None}
 }
-fn cropbox(frames: &[Frame], size: Option<u32>) -> Option<(i64, i64, u32)> {
-    // None -> auto
-    // Some(0) -> dont crop
-    // Some(32) -> 32x32
-    // Return Some((left, top, size))
-    // if every frame is empty -> None: no crop
+fn crop_box(frames: &[Frame], size: Option<u32>) -> Option<(i64, i64, u32)> {
     let boxes: Vec<_> = frames.iter().filter_map(|f| bbox(&f.img)).collect();
     if boxes.is_empty() {return None;}
-    // loop through every box and take the min/max out of the first order `f.x`
     let x0 = boxes.iter().map(|f| f.0).min().unwrap();
     let y0 = boxes.iter().map(|f| f.1).min().unwrap();
     let x1 = boxes.iter().map(|f| f.2).max().unwrap();
     let y1 = boxes.iter().map(|f| f.3).max().unwrap();
-    // handing 3 cases of sizes 
-    // size is i64 not because it can be negative but because of which type it is doing math with. Rust doesnt let you mix types.
     let size: i64 = match size {
         Some(0) => return None,
         Some(s) => s as i64, 
         None => {
-            let need = (x1-x0).max(y1-y0) + MARGIN * 2; //plus 2px on both sides
-            // rounding up to a multiple of 8. Mastermind rounding up trick
+            let need = (x1-x0).max(y1-y0) + MARGIN * 2;
             (need + 7) / 8 * 8
         }
     };
-
     let centerx = (x0 + x1) /2; 
     let left = centerx - size/2;
-    let bottom = y1 + MARGIN; //+2px
+    let bottom = y1 + MARGIN;
     Some((left, bottom-size, size as u32))
 }
-
+fn crop_window(img: &RgbaImage, left: i64, top: i64, size: u32) -> RgbaImage {
+    let mut output = ImageBuffer::new(size, size);
+    imageops::overlay(&mut output, img, -left, -top);
+    output
+}
 fn main() {
-    
-    // input output scale (size)
+
     let args : Vec<String> = std::env::args().collect();
+    let (src, dst) = (&args[1], &args[2]);
+    let scale: u32 = args.get(3).map_or(8, |s| s.parse().expect("scale must be a number"));
+    let size: Option<u32> = args.get(4).map(|s| s.parse().expect("size must be a number"));
+    let mut frames = load_frames(src);
+    
+    println!("----checking arguments----");
     if args.len() < 3 {
         eprintln!("Required order: pixel-up <input.gif> <output.gif> [scale] [size]");
         std::process::exit(1)
     }
-    let (src, dst) = (&args[1], &args[2]);
-    let scale: u32 = args.get(3).map_or(8, |s| s.parse().expect("scale must be a number"));
-    let size: Option<u32> = args.get(4).map(|s| s.parse().expect("size must be a number"));
     println!("{src} -> {dst}, {scale}, {size:?}" );
 
-
-    println!("--------");
-    let frames = load_frames(src);
+    println!("----frame loading----");
     println!("the gif has {} frames", frames.len());
     for frame in &frames {
         println!("{}x{}, {} ms", frame.img.width(), frame.img.height(), frame.ms);
     }
-    
-   
-    println!("--------");
+
+    println!("----bounding box----");
     for (i, f) in frames.iter().enumerate() {
         println!("frame {i}: {:?}", bbox(&f.img));
     }
 
+    println!("----cropping box calculation----");
+    println!("crop box: {:?}", crop_box(&frames, size));
+
+
+    println!("----cropping----");
     
-    println!("--------");
-    println!("crop box: {:?}", cropbox(&frames, size));
+    if let Some((left, top, size)) = crop_box(&frames, size) {
+        for f in &mut frames {
+            f.img = crop_window(&f.img, left, top, size);
+        }
+    }
+    for f in &mut frames {
+        let (w, h) = f.img.dimensions();
+        f.img = imageops::resize(&f.img, w * scale , h * scale, imageops::FilterType::Nearest);
+    }
+
+    if dst.to_lowercase().ends_with(".png") {
+        frames[0].img.save(dst).expect("can't save PNG");
+        println!("{dst}: {}x{}", frames[0].img.width(), frames[0].img.height())
+    }
+    
 }

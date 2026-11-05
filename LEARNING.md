@@ -1,3 +1,15 @@
+# pixel-up
+
+A small command-line tool, written in Rust, that crops pixel-art GIFs around the
+drawing and enlarges them with crisp, unblurred pixels.
+
+I built it for my pomodoro app's animal animations: Clip Studio Paint blurs
+pixel art when it scales an export, so I export at 100% and let pixel-up do
+the enlarging with nearest-neighbor scaling.
+
+> 🚧 Work in progress. PNG output works; animated GIF output is next.
+
+
 ## How the program works (so far)
 
 ### 1. Reading the command-line arguments
@@ -82,3 +94,33 @@ Rust doesn't let you mix number types.
 
 **Rounding up trick:** `(need + 7) / 8 * 8`. Integer division rounds down, and adding 7 first
 pushes it to the next multiple. On unsigned types, Rust has `n.next_multiple_of(8)` built in.
+
+### Crop, enlarge, save a PNG file
+Apply the crop to every frame from `cropbox` calculation, scale it up with nearest neighbor mode (most fitted for pixel mode), and save the first frame as a PNG so you can see in demo how it works.
+
+> tiny problem: Run a same dst file name will overwrite it with a new file. Solution: Should make a eprintl to warn or a small feature later
+
+sources: 
+
+imageops modules:
+- [docs.rs: resize](https://docs.rs/image/latest/image/imageops/index.html)
+- [docs.rs: overlay](docs.rs/image/latest/image/imageops/fn.overlay.html)
+- [from-pixel from ImageBuffer: Constructs a new `ImageBuffer` by copying a pixel
+](https://docs.rs/image/latest/image/struct.ImageBuffer.html#method.from_pixel)
+
+
+
+## Mistakes and how I fixed them
+- 2026-11-04: wrote `Option<i64, i64, i64, i64>` → E0107. `Option` holds
+  ONE thing, so the 4 numbers need to be a tuple: `Option<(i64, i64, i64, i64)>` 
+- 2026-11-04: wrote `x1.max(x) + 1` instead of `x1.max(x + 1)`. No compiler
+  error, but the +1 piled up for every visible pixel (got 7 instead of 4).
+  Lesson: the compiler can't catch wrong math. Test with an example where
+  you already know the answer
+- 2026-11-04: `for f in frames` moves the Vec; use `&frames` if I need it after
+- 2026-11-03: used `print!` instead of `println!` → no newlines
+- 2026-11-05: michi (tester) came out with bad quality: blurry stripes between colours. Turn out it wasn't my code but because it was the demo gif my Clip Studio first ever exported which had some disported pixels. Quite interesting
+- 2026-11-05: `RgbaImage([0,0,0,0])` → E0423. `Rgba` is ONE pixel,
+  `RgbaImage` is a whole image. Needed `Rgba([0, 0, 0, 0])` (and the import)
+- 2026-11-05: put `struct`, `fn` and `const` inside `main`. It works, but future testing it can't see them. Definitions go at the top level; `let` stay
+  inside functions
