@@ -3,6 +3,7 @@ use std::{fs::File, io::BufReader};
 use image::{AnimationDecoder, RgbaImage, codecs::gif::GifDecoder};
 
 fn main() {
+    const MARGIN: i64 = 2; // leaving margin as 2px each side, i64 cuz do math with values from bbox
     // input output scale (size)
     let args : Vec<String> = std::env::args().collect();
     if args.len() < 3 {
@@ -45,12 +46,13 @@ fn main() {
             // see if alpha in rgba is transparent (0) or is opaque (1)
             if pixel[3] > 0 {
                 found = true;
+                // shadowing?
                 let (x, y) = (x as i64, y as i64);
                 // compare between 2 value which is smaller
                 x0 = x0.min(x);
                 y0 = y0.min(y);
-                x1 = x1.max(x) + 1;
-                y1 = y1.max(y) + 1;
+                x1 = x1.max(x + 1);
+                y1 = y1.max(y + 1);
             }
         }
         if found {Some((x0, y0, x1, y1))} else {None}
@@ -58,4 +60,37 @@ fn main() {
     for (i, f) in frames.iter().enumerate() {
         println!("frame {i}: {:?}", bbox(&f.img));
     }
+
+    fn cropbox(frames: &[Frame], size: Option<u32>) -> Option<(i64, i64, u32)> {
+        // None -> auto
+        // Some(0) -> dont crop
+        // Some(32) -> 32x32
+        // Return Some((left, top, size))
+        // if every frame is empty -> None: no crop
+        let boxes: Vec<_> = frames.iter().filter_map(|f| bbox(&f.img)).collect();
+        if boxes.is_empty() {return None;}
+        // loop through every box and take the min/max out of the first order `f.x`
+        let x0 = boxes.iter().map(|f| f.0).min().unwrap();
+        let y0 = boxes.iter().map(|f| f.1).min().unwrap();
+        let x1 = boxes.iter().map(|f| f.2).max().unwrap();
+        let y1 = boxes.iter().map(|f| f.3).max().unwrap();
+        // handing 3 cases of sizes 
+        // size is i64 not because it can be negative but because of which type it is doing math with. Rust doesnt let you mix types.
+        let size: i64 = match size {
+            Some(0) => return None,
+            Some(s) => s as i64, 
+            None => {
+                let need = (x1-x0).max(y1-y0) + MARGIN * 2; //plus 2px on both sides
+                // rounding up to a multiple of 8. Mastermind rounding up trick
+                (need + 7) / 8 * 8
+            }
+        };
+
+        let centerx = (x0 + x1) /2; 
+        let left = centerx - size/2;
+        let bottom = y1 + MARGIN; //+2px
+        Some((left, bottom-size, size as u32))
+    }
+    println!("--------");
+    println!("crop box: {:?}", cropbox(&frames, size));
 }
