@@ -14,7 +14,7 @@
 
 ## Concepts
 ### How this project started
-So as I was working on my pomodoro mobile application project which is using animals pixel gif animation to run during idle time and many more moods. I ran into a problem when the drawing software I was using (Clip Paint Studio) isn't very good at adjusting desired sizes with proper resolution after exporting. I found it would be more fitting to run a script to do that for me. I firstly came up with Python script then a Rust Project interfered that and here I am learning Rust during my autumn break.
+So as I was working on my pomodoro mobile application project which is using animals pixel gif animation to run during idle time and many more moods. I ran into a problem when the drawing software I was using (Clip Studio Paint) isn't very good at adjusting desired sizes with proper resolution after exporting. I found it would be more fitting to run a script to do that for me. I firstly came up with Python script then a Rust Project interfered that and here I am learning Rust during my autumn break.
 
 
 ## Mistakes and how I fixed them
