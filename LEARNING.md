@@ -112,3 +112,4 @@ imageops modules:
   `RgbaImage` is a whole image. Needed `Rgba([0, 0, 0, 0])` (and the import)
 - 2026-11-05: put `struct`, `fn` and `const` inside `main`. It works, but future testing it can't see them. Definitions go at the top level; `let` stay
   inside functions
+- 2026-11-08: test failed for merge_holds_total_duration_for_duplicated_frames. 

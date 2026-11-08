@@ -1,6 +1,6 @@
-use std::{fs::File, io::BufReader};
+use std::{fs::File, io::BufReader, result};
 
-use image::{AnimationDecoder, ImageBuffer, RgbaImage, codecs::gif::GifDecoder, imageops};
+use image::{AnimationDecoder, ImageBuffer, Rgba, RgbaImage, codecs::gif::GifDecoder, imageops};
 
 const MARGIN: i64 = 2;
 struct Frame {
@@ -61,6 +61,31 @@ fn crop_window(img: &RgbaImage, left: i64, top: i64, size: u32) -> RgbaImage {
     imageops::overlay(&mut output, img, -left, -top);
     output
 }
+
+fn merge_holds(frames: Vec<Frame>) -> Vec<Frame> {
+    let mut result: Vec<Frame> = Vec::new();
+    for frame in frames{
+        // check if frame is empty, if it is, ignore and add its ms to the previous one
+        let is_empty = bbox(&frame.img).is_none();
+        if result.is_empty() {
+            if !is_empty{result.push(frame);}
+            continue; //skip the rest of the loop and go to the next frame
+        }
+
+        let last_frame= result.len()-1;
+
+        if is_empty {
+            println!("skipped an empty frame");
+            // result's last frame inherits the empty frame's duration 
+            result[last_frame].ms += frame.ms;
+        } else if frame.img == result[last_frame].img  { // duplicated frames get merged
+            result[last_frame].ms += frame.ms;
+        } else { // non empty frame get pushed to result
+            result.push(frame);
+        }
+    }
+    result
+}
 fn main() {
 
     let args : Vec<String> = std::env::args().collect();
@@ -108,4 +133,38 @@ fn main() {
         println!("{dst}: {}x{}", frames[0].img.width(), frames[0].img.height())
     }
     
+}
+// run `cargo test`
+#[test]
+fn merge_holds_total_duration_for_duplicated_frames() {
+    // starting with smol dimension
+    let mut img = RgbaImage::new(4, 4);
+    img.put_pixel(1, 1, Rgba([255, 0, 0, 255])); //opaq red
+
+    let frames = vec![
+        Frame { img: img.clone(), ms: 100},
+        Frame { img: img.clone(), ms: 100},
+        Frame { img: img.clone(), ms: 100},
+    ];
+    let merged = merge_holds(frames);
+
+    assert_eq!(merged.len(), 1); // 3 identical frames merged into 1
+    assert_eq!(merged[0].ms, 300); // total of 3 frames 
+}
+
+#[test]
+fn merge_holds_empty_last_frame() {
+    // starting with smol dimension
+    let mut img = RgbaImage::new(4, 4);
+    img.put_pixel(1, 1, Rgba([255, 0, 0, 255])); //opaq red
+    let empty_frame = RgbaImage::new(4, 4);
+    let frames = vec![
+        Frame { img: img.clone(), ms: 100},
+        Frame { img: img.clone(), ms: 100},
+        Frame { img: empty_frame, ms: 100},
+    ];
+    let merged = merge_holds(frames);
+
+    assert_eq!(merged.len(), 1); // 2 identical frames + 1 empty frame -> merged into 1
+    assert_eq!(merged[0].ms, 300); // total of 3 frames 
 }
