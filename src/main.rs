@@ -1,8 +1,9 @@
-use std::{fs::File, io::BufReader, result};
+use std::{collections::HashMap, fs::File, io::BufReader};
 
 use image::{AnimationDecoder, ImageBuffer, Rgba, RgbaImage, codecs::gif::GifDecoder, imageops};
 
 const MARGIN: i64 = 2;
+const VISIBLE_ALPHA: u8 = 128;
 struct Frame {
     img: RgbaImage,
     ms: u32
@@ -61,6 +62,11 @@ fn crop_window(img: &RgbaImage, left: i64, top: i64, size: u32) -> RgbaImage {
     imageops::overlay(&mut output, img, -left, -top);
     output
 }
+fn scale_up(img: &RgbaImage, scale: u32) -> RgbaImage {
+    let nwidth = img.width() * scale;
+    let nheight = img.height() * scale;
+    imageops::resize(img, nwidth, nheight, imageops::FilterType::Nearest)
+}
 
 fn merge_holds(frames: Vec<Frame>) -> Vec<Frame> {
     let mut result: Vec<Frame> = Vec::new();
@@ -85,6 +91,88 @@ fn merge_holds(frames: Vec<Frame>) -> Vec<Frame> {
         }
     }
     result
+}
+// store and build the pallete, no more than 64 colors
+fn collect_colors(frames: &[Frame]) -> Vec<[u8; 3]> {
+    let mut colors: Vec<[u8; 3]> = Vec::new(); // an array of rgb code
+    for f in frames {
+        for pixel in f.img.pixels() {
+            let is_opaque = pixel[3] >= VISIBLE_ALPHA;
+            let rgb = [pixel[0], pixel[1], pixel[2]];
+            if is_opaque && !colors.contains(&rgb) {
+                colors.push(rgb);
+            }
+        }
+    }
+    colors
+}
+// lookuptable: [color, index]
+fn build_lut(colors: &[[u8; 3]]) -> HashMap<[u8; 3], u8> {
+    let mut lut: HashMap<[u8; 3], u8> = HashMap::new();
+
+    for i in 0..colors.len() {
+        let index = (i + 1) as u8;
+        lut.insert(colors[i], index);
+    }
+    lut
+}
+
+fn flat_palette(colors: &[[u8; 3]]) -> Vec<u8> {
+    let mut flat: Vec<u8> = vec![0,0,0];
+    for color in colors {
+        flat.push(color[0]);
+        flat.push(color[1]);
+        flat.push(color[2]);
+    }
+    flat
+}
+
+fn to_indices(img: &RgbaImage, lut: &HashMap<[u8; 3], u8>) -> Vec<u8> {
+    let mut indices: Vec<u8> = Vec::new();
+    for pixel in img.pixels() {
+        if pixel[3] >= VISIBLE_ALPHA {
+            let rgb = [pixel[0], pixel[1], pixel[2]];
+            indices.push(lut[&rgb]);
+        } else {
+            indices.push(0);
+        }
+    }
+    indices
+}
+
+fn save_gif(frames: Vec<Frame>, path: &str) {
+    let merged_frames = merge_holds(frames);
+    if merged_frames.is_empty() {
+        eprintln!("every frame is empty, nothing to save");
+        std::process::exit(1);
+    }
+
+    let colors = collect_colors(&merged_frames);
+    if colors.len() > 64 {
+        eprintln!("{} colors: this may have looked blurry. Try export at 100% instead.", colors.len());
+        std::process::exit(1);
+    };
+    let lut = build_lut(&colors);
+    let palette = flat_palette(&colors);
+    
+    let width = merged_frames[0].img.width() as u16;
+    let height = merged_frames[0].img.height() as u16;
+    let mut file = File::create(path).expect("can't create the output file");
+    let mut encoder = gif::Encoder::new(&mut file, width, height, &palette).expect("can't start the gif");
+    encoder.set_repeat(gif::Repeat::Infinite).expect("can't set looping");
+
+    for f in &merged_frames {
+        // gf: gif_frame
+        let mut gif_frame = gif::Frame::default();
+        gif_frame.width = width;
+        gif_frame.height = height;
+        gif_frame.buffer = to_indices(&f.img, &lut).into();
+        gif_frame.delay = (f.ms / 10) as u16; // ms -> 1/100 s
+        gif_frame.transparent = Some(0); // palette slot 0 is invisible
+        gif_frame.dispose = gif::DisposalMethod::Background;
+        encoder.write_frame(&gif_frame).expect("can't write a frame");
+    }
+    println!("{path}: {width}x{height}, {} frames, {} colors", merged_frames.len(), colors.len());
 }
 fn main() {
 
@@ -123,14 +211,16 @@ fn main() {
             f.img = crop_window(&f.img, left, top, size);
         }
     }
+
     for f in &mut frames {
-        let (w, h) = f.img.dimensions();
-        f.img = imageops::resize(&f.img, w * scale , h * scale, imageops::FilterType::Nearest);
+        f.img = scale_up(&f.img, scale);
     }
 
     if dst.to_lowercase().ends_with(".png") {
         frames[0].img.save(dst).expect("can't save PNG");
         println!("{dst}: {}x{}", frames[0].img.width(), frames[0].img.height())
+    } else {
+        save_gif(frames, dst);
     }
     
 }
@@ -167,4 +257,43 @@ fn merge_holds_empty_last_frame() {
 
     assert_eq!(merged.len(), 1); // 2 identical frames + 1 empty frame -> merged into 1
     assert_eq!(merged[0].ms, 300); // total of 3 frames 
+}
+#[test]
+fn collect_colors_skips_duplicates_and_transparent() {
+    let mut img = RgbaImage::new(3, 1);
+    img.put_pixel(0, 0, Rgba([255, 0, 0, 255]));
+    img.put_pixel(1, 0, Rgba([255, 0, 0, 255]));
+    img.put_pixel(2, 0, Rgba([0, 255, 0, 255]));
+    let frames = vec![Frame {img, ms: 100}];
+
+    assert_eq!(collect_colors(&frames), vec![[255, 0, 0], [0, 255, 0]]);
+}
+
+#[test]
+fn build_lut_starts_at_one() {
+    let colors = vec![[255, 0, 0], [0,0,255]];
+    let lut = build_lut(&colors);
+
+    assert_eq!(lut[&[255, 0, 0]], 1); //first color index is 1, not 0
+    assert_eq!(lut[&[0, 0, 255]], 2);
+}
+#[test]
+// fn palette_bytes_starts_with_transparent_slot() {
+//     let colors = vec![[255, 0, 0], [0, 0, 255]];
+//     // slot 0 (dummy), then red, then blue — all in one flat row
+//     assert_eq!(flat_palette(&colors), vec![0, 0, 0, 255, 0, 0, 0, 0, 255]);
+// }
+
+// #[test]
+// fn to_indices_turns_pixels_into_numbers() {
+//     let mut img = RgbaImage::new(3, 1);            // 3 pixels in a row
+//     img.put_pixel(0, 0, Rgba([255, 0, 0, 255]));   // red
+//     // pixel 1 stays transparent
+//     img.put_pixel(2, 0, Rgba([0, 0, 255, 255]));   // blue
+
+//     let colors = vec![[255, 0, 0], [0, 0, 255]];
+//     let lut = build_lut(&colors);
+
+//     // red → 1, transparent → 0, blue → 2
+//     assert_eq!(to_indices(&img, &lut), vec![1, 0, 2]);
 }
