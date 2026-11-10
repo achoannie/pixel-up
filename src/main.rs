@@ -1,6 +1,6 @@
 use std::{collections::HashMap, fs::File, io::BufReader};
 
-use image::{AnimationDecoder, ImageBuffer, Rgba, RgbaImage, codecs::gif::GifDecoder, imageops};
+use image::{AnimationDecoder, ImageBuffer, RgbaImage, codecs::gif::GifDecoder, imageops};
 
 const MARGIN: i64 = 2;
 const VISIBLE_ALPHA: u8 = 128;
