@@ -278,22 +278,22 @@ fn build_lut_starts_at_one() {
     assert_eq!(lut[&[0, 0, 255]], 2);
 }
 #[test]
-// fn palette_bytes_starts_with_transparent_slot() {
-//     let colors = vec![[255, 0, 0], [0, 0, 255]];
-//     // slot 0 (dummy), then red, then blue — all in one flat row
-//     assert_eq!(flat_palette(&colors), vec![0, 0, 0, 255, 0, 0, 0, 0, 255]);
-// }
+fn palette_bytes_starts_with_transparent_slot() {
+    let colors = vec![[255, 0, 0], [0, 0, 255]];
+    // slot 0 (dummy), then red, then blue — all in one flat row
+    assert_eq!(flat_palette(&colors), vec![0, 0, 0, 255, 0, 0, 0, 0, 255]);
+}
 
-// #[test]
-// fn to_indices_turns_pixels_into_numbers() {
-//     let mut img = RgbaImage::new(3, 1);            // 3 pixels in a row
-//     img.put_pixel(0, 0, Rgba([255, 0, 0, 255]));   // red
-//     // pixel 1 stays transparent
-//     img.put_pixel(2, 0, Rgba([0, 0, 255, 255]));   // blue
+#[test]
+fn to_indices_turns_pixels_into_numbers() {
+    let mut img = RgbaImage::new(3, 1);            // 3 pixels in a row
+    img.put_pixel(0, 0, Rgba([255, 0, 0, 255]));   // red
+    // pixel 1 stays transparent
+    img.put_pixel(2, 0, Rgba([0, 0, 255, 255]));   // blue
 
-//     let colors = vec![[255, 0, 0], [0, 0, 255]];
-//     let lut = build_lut(&colors);
+    let colors = vec![[255, 0, 0], [0, 0, 255]];
+    let lut = build_lut(&colors);
 
-//     // red → 1, transparent → 0, blue → 2
-//     assert_eq!(to_indices(&img, &lut), vec![1, 0, 2]);
+    // red → 1, transparent → 0, blue → 2
+    assert_eq!(to_indices(&img, &lut), vec![1, 0, 2]);
 }
