@@ -1,6 +1,6 @@
 use std::{collections::HashMap, fs::File, io::BufReader};
 
-use image::{AnimationDecoder, ImageBuffer, RgbaImage, codecs::gif::GifDecoder, imageops};
+use image::{AnimationDecoder, ImageBuffer, Rgba, RgbaImage, codecs::gif::GifDecoder, imageops};
 
 const MARGIN: i64 = 2;
 const VISIBLE_ALPHA: u8 = 128;
@@ -9,6 +9,12 @@ struct Frame {
     ms: u32
 }
 fn load_frames(path: &str) -> Vec<Frame> {
+    if path.to_lowercase().ends_with(".png") {
+        let img = image::open(path).expect("Can't open a png image").to_rgba8();
+        return vec![Frame{img, ms: 100}];
+    }
+
+
     let file = File::open(path).expect("cannot open the file");
     let file_reader = BufReader::new(file);
     let decoder = GifDecoder::new(file_reader).expect("Not a gif");
@@ -286,14 +292,30 @@ fn palette_bytes_starts_with_transparent_slot() {
 
 #[test]
 fn to_indices_turns_pixels_into_numbers() {
-    let mut img = RgbaImage::new(3, 1);            // 3 pixels in a row
-    img.put_pixel(0, 0, Rgba([255, 0, 0, 255]));   // red
-    // pixel 1 stays transparent
-    img.put_pixel(2, 0, Rgba([0, 0, 255, 255]));   // blue
+    let mut img = RgbaImage::new(3, 1);
+    img.put_pixel(0, 0, Rgba([255, 0, 0, 255]));   
+    img.put_pixel(2, 0, Rgba([0, 0, 255, 255]));
 
     let colors = vec![[255, 0, 0], [0, 0, 255]];
     let lut = build_lut(&colors);
 
-    // red → 1, transparent → 0, blue → 2
     assert_eq!(to_indices(&img, &lut), vec![1, 0, 2]);
+}
+
+#[test]
+fn load_png_then_give_one_frame() {
+    let mut img = RgbaImage::new(3, 1);
+    img.put_pixel(1, 0, Rgba([255, 0, 0, 255]));
+
+    let path = std::env::temp_dir().join("pixeluptest.png");
+    img.save(&path).expect("cant save test png");
+
+    let frames = load_frames(path.to_str().unwrap());
+
+    assert_eq!(frames.len(), 1);
+    assert_eq!(frames[0].img.dimensions(), (3, 1));
+    assert_eq!(frames[0].img.get_pixel(1, 0), &Rgba([255, 0, 0, 255]));
+    assert_eq!(frames[0].img.get_pixel(0, 0)[3], 0); 
+
+    std::fs::remove_file(path).ok();
 }
