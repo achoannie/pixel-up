@@ -319,3 +319,47 @@ fn load_png_then_give_one_frame() {
 
     std::fs::remove_file(path).ok();
 }
+#[test]
+fn load_png_with_uppercase_ending() {
+    let mut img = RgbaImage::new(3, 1);
+    img.put_pixel(1, 0, Rgba([255, 0, 0, 255]));
+
+    let path = std::env::temp_dir().join("UPPERCASETEST.PNG");
+    img.save(&path).expect("cant save test png");
+    let frames = load_frames(path.to_str().unwrap());
+    
+    assert_eq!(frames.len(), 1);
+
+    std::fs::remove_file(path).ok();
+}
+
+#[test]
+fn load_png_without_alpha_is_fully_opaque() {
+    // some png has no alpha, just rbg
+    let img = image::RgbImage::new(3, 1);
+    let path = std::env::temp_dir().join("test_rgb.png");
+    img.save(&path).unwrap();
+
+    let frames = load_frames(path.to_str().unwrap());
+    
+    assert_eq!(frames[0].img.get_pixel(0, 0)[3], 255); // to_rgba8 fills alpha with 255
+    assert_eq!(bbox(&frames[0].img), Some((0, 0, 3, 1)));
+
+    std::fs::remove_file(path).ok();
+}
+#[test]
+fn load_png_survive_pipeline() {
+    let mut img = RgbaImage::new(4, 4);
+    img.put_pixel(1, 1, Rgba([255, 0,0,255]));
+    let path = std::env::temp_dir().join("test_pipe.png");
+    img.save(&path).unwrap();
+
+    let frames = load_frames(path.to_str().unwrap());
+    let big= scale_up(&frames[0].img, 8);
+   
+    assert_eq!(big.dimensions(), (32, 32));
+    assert_eq!(big.get_pixel(8, 8), &Rgba([255, 0,0,255]));
+    assert_eq!(big.get_pixel(0, 0)[0], 0);
+
+    std::fs::remove_file(path).ok();
+}
